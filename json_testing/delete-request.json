@@ -1,1 +1,4 @@
-{"request_type": "delete-player", "username": "brew"}
+{
+  "request_type": "delete-player",
+  "username": "brew"
+}

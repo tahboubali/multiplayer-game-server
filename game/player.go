@@ -1,6 +1,10 @@
 package game
 
-import "sync"
+import (
+	"fmt"
+	"multi-player-game/utils"
+	"sync"
+)
 
 var (
 	idLock     sync.Mutex
@@ -20,14 +24,21 @@ type Player struct {
 	gameObj
 }
 
-func (p Player) ShootProj(x, y, vX, vY float64) {
+func (p *Player) String() string {
+	s, err := utils.PrettyStruct(p)
+	if err != nil {
+		fmt.Printf("error with String() for player `%s`\n", p.Username)
+	}
+	return s
+}
+
+func (p *Player) ShootProj(x, y, vX, vY float64) {
 	proj := NewProjectile(p.Username, x, y, vX, vY)
-	proj.Id = currProjId
 	p.Projectiles = append(p.Projectiles, proj)
 }
 
-func NewPlayer(username string, x float64, y float64) Player {
-	return Player{
+func NewPlayer(username string, x float64, y float64) *Player {
+	return &Player{
 		Username:    username,
 		Projectiles: make([]Projectile, 0),
 		gameObj: gameObj{
@@ -43,9 +54,18 @@ type Projectile struct {
 	gameObj
 }
 
+func (p Projectile) String() string {
+	s, _ := utils.PrettyStruct(p)
+	return s
+}
+
 func NewProjectile(shooter string, x, y, vX, vY float64) Projectile {
+	idLock.Lock()
+	currProjId++
+	idLock.Unlock()
 	projectile := Projectile{
 		Shooter: shooter,
+		Id:      currProjId,
 		gameObj: gameObj{
 			X:  x,
 			Y:  y,
@@ -53,8 +73,5 @@ func NewProjectile(shooter string, x, y, vX, vY float64) Projectile {
 			VY: vY,
 		},
 	}
-	idLock.Unlock()
-	currProjId++
-	idLock.Lock()
 	return projectile
 }

@@ -1,1 +1,16 @@
-{"request_type": "update-player", "player_info": {"x": 10, "y": 12, "username": "brew"}, "update_type": "projectile", "projectiles": [{"x":  3, "y": 2, "velocity_x": 10, "velocity_y": 0}]}
+{
+  "request_type": "update-player",
+  "player_info": {
+    "x": 10,
+    "y": 12,
+    "username": "brew"
+  },
+  "projectiles": [
+    {
+      "x": 3,
+      "y": 2,
+      "velocity_x": 10,
+      "velocity_y": 0
+    }
+  ]
+}
