@@ -5,17 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"multi-player-game/consts"
 	"multi-player-game/game"
+	"multi-player-game/utils"
 	"net"
 	"strings"
 	"sync"
-)
-
-const (
-	NewPlayer               = "new-player"
-	UpdatePlayerMovement    = "update-player-movement"
-	DeletePlayer            = "delete-player"
-	UpdatePlayerProjectiles = "update-player-projectiles"
 )
 
 type Server struct {
@@ -37,22 +33,6 @@ func NewConn(conn net.Conn) *Conn {
 		Conn: conn,
 	}
 }
-
-//func (c *Conn) HashAndSaltPassword(password string) error {
-//	salt, err := bcrypt.GenerateSalt(10)
-//	if err != nil {
-//		return err
-//	}
-//
-//	hashedPassword, err := bcrypt.HashPassword(password, salt)
-//	if err != nil {
-//		return err
-//	}
-//
-//	c.HashedPass = hashedPassword
-//	c.salt = salt
-//	return nil
-//}
 
 func NewServer(port string) *Server {
 	return &Server{
@@ -76,11 +56,11 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("server is listening on port", s.port)
+	log.Println("server is listening on port", s.port)
 	defer func() {
 		err := ln.Close()
 		if err != nil {
-			fmt.Println("server closing error:", err)
+			log.Println("server closing error:", err)
 		}
 	}()
 
@@ -96,12 +76,12 @@ func (s *Server) readLoop(conn net.Conn) {
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
-			fmt.Println("connection closing error:", err)
+			log.Println("connection closing error:", err)
 		} else {
 			s.mu.Lock()
 			delete(s.conns, conn.RemoteAddr().String())
 			s.mu.Unlock()
-			fmt.Printf("connection closed (%s)\n", conn.RemoteAddr().String())
+			log.Printf("connection closed (%s)\n", conn.RemoteAddr().String())
 		}
 	}(conn)
 	payload := make([]byte, 2048)
@@ -112,7 +92,7 @@ func (s *Server) readLoop(conn net.Conn) {
 			if err == io.EOF {
 				return
 			}
-			fmt.Println("read error:", err)
+			log.Println("read error:", err)
 			continue
 		}
 		msg := Message{
@@ -120,14 +100,14 @@ func (s *Server) readLoop(conn net.Conn) {
 			from:    conn.RemoteAddr(),
 		}
 
-		fmt.Println("new message received:", msg)
+		utils.DebugPrintln("new message received:", msg)
 
 		dst := &bytes.Buffer{}
 		if err := json.Compact(dst, msg.payload); err != nil {
-			fmt.Println("compact error", err)
+			utils.DebugPrintln("compact error", err)
 		}
 		msg.payload = dst.Bytes()
-		fmt.Println("compacted:", string(msg.payload))
+		utils.DebugPrintln("compacted:", string(msg.payload))
 		err = s.handleMessage(msg, conn.RemoteAddr().String())
 		if err != nil {
 			write := fmt.Sprintln("error handling message:", err)
@@ -155,10 +135,10 @@ func (s *Server) handleMessage(m Message, addr string) error {
 	}
 
 	requestType := data["request_type"]
-	if requestType == NewPlayer {
+	if requestType == consts.NewPlayer {
 		player, exists, _, err := s.state.HandleNewPlayer(data)
 		if err != nil {
-			fmt.Println("error creating new player:", err)
+			utils.DebugPrintln("error creating new player:", err)
 		}
 		if exists {
 			_, _ = conn.Write([]byte(fmt.Sprintf(
@@ -167,20 +147,20 @@ func (s *Server) handleMessage(m Message, addr string) error {
 			))
 		}
 		conn.CurrPlayer = player
-	} else if requestType == UpdatePlayerMovement {
+	} else if requestType == consts.UpdatePlayerMovement {
 		_, err := s.state.HandleUpdatePlayer(data, "movement")
 		if err != nil {
-			fmt.Println("error updating player:", err)
+			utils.DebugPrintln("error updating player:", err)
 		}
-	} else if requestType == DeletePlayer {
+	} else if requestType == consts.DeletePlayer {
 		_, err := s.state.HandleDeletePlayer(data)
 		if err != nil {
-			fmt.Println("error deleting player:", err)
+			utils.DebugPrintln("error deleting player:", err)
 		}
-	} else if requestType == UpdatePlayerProjectiles {
+	} else if requestType == consts.UpdatePlayerProjectiles {
 		_, err := s.state.HandleUpdatePlayer(data, "projectiles")
 		if err != nil {
-			fmt.Println("error updating player:", err)
+			utils.DebugPrintln("error updating player:", err)
 		}
 	} else {
 		msg := fmt.Sprintf("did not recieve valid `request_type` for json: %s", payload)
@@ -195,7 +175,7 @@ func (s *Server) writeLoop() {
 			msg, _ := json.Marshal(s.state.Players)
 			err := s.broadcastMsg(string(msg) + "\n")
 			if err != nil {
-				fmt.Println("write loop err:", err)
+				utils.DebugPrintln("write loop err:", err)
 			}
 		}
 	}
@@ -207,12 +187,12 @@ func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.ln.Accept()
 		if err != nil {
-			fmt.Println("accept error:", err)
+			utils.DebugPrintln("accept error:", err)
 			continue
 		}
 		s.mu.Lock()
 		s.conns[conn.RemoteAddr().String()] = NewConn(conn)
-		fmt.Println(
+		utils.DebugPrintln(
 			"new connection established:",
 			conn.RemoteAddr().String(),
 			"\ncurrent connections:",
@@ -233,7 +213,7 @@ func (s *Server) broadcastMsg(msg string) error {
 		_, err := s.conns[addr].Write([]byte(msg))
 		s.mu.Unlock()
 		if err != nil {
-			fmt.Printf("write error writing to `%s`: %s\n", addr, err)
+			log.Printf("write error writing to `%s`: %s\n", addr, err)
 		}
 	}
 	return nil
@@ -246,16 +226,16 @@ func main() {
 		for {
 			_, err := fmt.Scanln(&input)
 			if err != nil {
-				fmt.Println("scan error:", err)
+				log.Println("scan error:", err)
 			}
 			if input == "players" {
 				marshal, _ := json.Marshal(server.state.Players)
-				fmt.Println(string(marshal))
+				log.Println(string(marshal))
 			}
 		}
 	}()
 	err := server.Start()
 	if err != nil {
-		fmt.Println("start error:", err)
+		log.Println("start error:", err)
 	}
 }
