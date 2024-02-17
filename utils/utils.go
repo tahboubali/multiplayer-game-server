@@ -14,13 +14,13 @@ func PrettyStruct(data interface{}) (string, error) {
 	return string(val), nil
 }
 
-func DebugPrintln(a ...any) {
+func DebugLog(a ...any) {
 	if consts.Debug {
 		log.Println(a)
 	}
 }
 
-func DebugPrintf(format string, a ...any) {
+func DebugLogf(format string, a ...any) {
 	if consts.Debug {
 		log.Printf(format, a)
 	}

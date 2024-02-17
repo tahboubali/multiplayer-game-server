@@ -67,7 +67,6 @@ func (s *Server) Start() error {
 	s.ln = ln
 	s.wg.Add(1)
 	go s.acceptLoop()
-	go s.writeLoop()
 	s.wg.Wait()
 	return nil
 }
@@ -84,10 +83,10 @@ func (s *Server) readLoop(conn net.Conn) {
 			log.Printf("connection closed (%s)\n", conn.RemoteAddr().String())
 		}
 	}(conn)
-	payload := make([]byte, 2048)
+	buf := make([]byte, 2048)
 
 	for {
-		n, err := conn.Read(payload)
+		n, err := conn.Read(buf)
 		if err != nil {
 			if err == io.EOF {
 				return
@@ -96,19 +95,20 @@ func (s *Server) readLoop(conn net.Conn) {
 			continue
 		}
 		msg := Message{
-			payload: payload[:n],
+			payload: buf[:n],
 			from:    conn.RemoteAddr(),
 		}
 
-		utils.DebugPrintln("new message received:", msg)
+		utils.DebugLog("new message received:", msg)
 
 		dst := &bytes.Buffer{}
 		if err := json.Compact(dst, msg.payload); err != nil {
-			utils.DebugPrintln("compact error", err)
+			utils.DebugLog("compact error", err)
 		}
 		msg.payload = dst.Bytes()
-		utils.DebugPrintln("compacted:", string(msg.payload))
+		utils.DebugLog("compacted:", string(msg.payload))
 		err = s.handleMessage(msg, conn.RemoteAddr().String())
+
 		if err != nil {
 			write := fmt.Sprintln("error handling message:", err)
 			fmt.Print(write)
@@ -138,7 +138,7 @@ func (s *Server) handleMessage(m Message, addr string) error {
 	if requestType == consts.NewPlayer {
 		player, exists, _, err := s.state.HandleNewPlayer(data)
 		if err != nil {
-			utils.DebugPrintln("error creating new player:", err)
+			utils.DebugLog("error creating new player:", err)
 		}
 		if exists {
 			_, _ = conn.Write([]byte(fmt.Sprintf(
@@ -147,36 +147,44 @@ func (s *Server) handleMessage(m Message, addr string) error {
 			))
 		}
 		conn.CurrPlayer = player
+		s.broadcastPlayers()
 	} else if requestType == consts.UpdatePlayerMovement {
 		_, err := s.state.HandleUpdatePlayer(data, "movement")
 		if err != nil {
-			utils.DebugPrintln("error updating player:", err)
+			utils.DebugLog("error updating player:", err)
 		}
+		s.broadcastPlayers()
 	} else if requestType == consts.DeletePlayer {
 		_, err := s.state.HandleDeletePlayer(data)
 		if err != nil {
-			utils.DebugPrintln("error deleting player:", err)
+			utils.DebugLog("error deleting player:", err)
 		}
+		s.broadcastPlayers()
 	} else if requestType == consts.UpdatePlayerProjectiles {
 		_, err := s.state.HandleUpdatePlayer(data, "projectiles")
 		if err != nil {
-			utils.DebugPrintln("error updating player:", err)
+			utils.DebugLog("error updating player:", err)
 		}
+		s.broadcastPlayers()
 	} else {
 		msg := fmt.Sprintf("did not recieve valid `request_type` for json: %s", payload)
 		_, _ = conn.Write([]byte(msg))
+		s.broadcastPlayers()
 	}
 	return nil
 }
 
-func (s *Server) writeLoop() {
-	for {
-		if len(s.state.Players) > 0 {
-			msg, _ := json.Marshal(s.state.Players)
-			err := s.broadcastMsg(string(msg) + "\n")
-			if err != nil {
-				utils.DebugPrintln("write loop err:", err)
-			}
+func (s *Server) broadcastPlayers() {
+	if len(s.state.Players) > 0 {
+		msg, err := json.Marshal(s.state.Players)
+		if err != nil {
+			log.Println("marshal error:", err)
+		}
+		if err := s.broadcastMsg(string(msg) + "\n"); err != nil {
+			log.Println("broadcast error:", err)
+		}
+		if err != nil {
+			utils.DebugLog("write loop err:", err)
 		}
 	}
 }
@@ -187,12 +195,12 @@ func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.ln.Accept()
 		if err != nil {
-			utils.DebugPrintln("accept error:", err)
+			utils.DebugLog("accept error:", err)
 			continue
 		}
 		s.mu.Lock()
 		s.conns[conn.RemoteAddr().String()] = NewConn(conn)
-		utils.DebugPrintln(
+		utils.DebugLog(
 			"new connection established:",
 			conn.RemoteAddr().String(),
 			"\ncurrent connections:",
@@ -204,12 +212,11 @@ func (s *Server) acceptLoop() {
 }
 
 func (s *Server) broadcastMsg(msg string) error {
-
 	for addr := range s.conns {
+		s.mu.Lock()
 		if s.conns[addr] == nil {
 			continue
 		}
-		s.mu.Lock()
 		_, err := s.conns[addr].Write([]byte(msg))
 		s.mu.Unlock()
 		if err != nil {
