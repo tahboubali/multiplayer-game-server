@@ -11,16 +11,10 @@ var (
 	currProjId int64
 )
 
-type gameObj struct {
-	X  float64 `json:"x"`
-	Y  float64 `json:"y"`
-	VX float64 `json:"velocity_x"`
-	VY float64 `json:"velocity_y"`
-}
-
 type Player struct {
 	Projectiles []Projectile `json:"projectiles"`
 	Username    string       `json:"username"`
+	Score       int          `json:"score"`
 	gameObj
 }
 

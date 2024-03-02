@@ -12,6 +12,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -256,6 +257,12 @@ func main() {
 				marshal, _ := json.Marshal(server.state.Players)
 				log.Println(string(marshal))
 			}
+		}
+	}()
+	go func() {
+		for {
+			server.state.GenerateCoin()
+			time.Sleep(5 * time.Second)
 		}
 	}()
 	err := server.Start()
