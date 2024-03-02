@@ -275,6 +275,12 @@ func main() {
 			}
 		}
 	}()
+	go func() {
+		for {
+			server.state.GenerateCoin()
+			time.Sleep(5 * time.Second)
+		}
+	}()
 	err := server.Start()
 	if err != nil {
 		log.Println("start error:", err)
