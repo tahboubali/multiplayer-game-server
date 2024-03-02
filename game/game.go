@@ -105,18 +105,18 @@ func (g *State) HandleUpdatePlayer(data map[string]any, updateType string) ([]by
 	return []byte(fmt.Sprintf("{\"message\": \"update_player\", \"player\":%v}\n", marshal)), nil
 }
 
-func (g *State) HandleDeletePlayer(data map[string]any) ([]byte, error) {
+func (g *State) HandleDeletePlayer(data map[string]any) ([]byte, string, error) {
 	g.playersLock.Lock()
 	defer g.playersLock.Unlock()
 	username, ok := data["username"].(string)
 	if !ok {
-		return []byte("failed to delete player\n"), fmt.Errorf("invalid type for username")
+		return []byte("failed to delete player\n"), "", fmt.Errorf("invalid type for username")
 	}
 	if _, exists := g.Players[username]; !exists {
-		return []byte("failed to delete player\n"), fmt.Errorf("player with username `%s` does not exist", username)
+		return []byte("failed to delete player\n"), "", fmt.Errorf("player with username `%s` does not exist", username)
 	}
 	delete(g.Players, username)
-	return []byte(fmt.Sprintf("{\"message\": \"delete_player\", \"username\":%v}\n", username)), nil
+	return []byte(fmt.Sprintf("{\"message\": \"delete_player\", \"username\":%v}\n", username)), username, nil
 }
 
 func (g *State) HandleNewPlayer(data map[string]any) (*Player, bool, []byte, error) {
