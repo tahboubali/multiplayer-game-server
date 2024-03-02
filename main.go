@@ -142,8 +142,8 @@ func (s *Server) handleMessage(m Message, addr string) error {
 		}
 		if exists {
 			_, _ = conn.Write([]byte(fmt.Sprintf(
-				`{"exists": true, "player_info":{"x": %f, "y": %f, "velocity_x": %f, "velocity_y": %f}}`,
-				player.X, player.Y, player.VX, player.VY),
+				`{"request_type": "%s", "exists": true, "player_info":{"x": %f, "y": %f, "velocity_x": %f, "velocity_y": %f}}`,
+				consts.NewPlayer, player.X, player.Y, player.VX, player.VY),
 			))
 		}
 		conn.CurrPlayer = player
@@ -155,11 +155,12 @@ func (s *Server) handleMessage(m Message, addr string) error {
 		}
 		s.broadcastPlayers()
 	} else if requestType == consts.DeletePlayer {
-		_, err := s.state.HandleDeletePlayer(data)
+		_, deleted, err := s.state.HandleDeletePlayer(data)
 		if err != nil {
 			utils.DebugLog("error deleting player:", err)
+		} else {
+			s.broadcastDelete(deleted)
 		}
-		s.broadcastPlayers()
 	} else if requestType == consts.UpdatePlayerProjectiles {
 		_, err := s.state.HandleUpdatePlayer(data, "projectiles")
 		if err != nil {
@@ -176,7 +177,10 @@ func (s *Server) handleMessage(m Message, addr string) error {
 
 func (s *Server) broadcastPlayers() {
 	if len(s.state.Players) > 0 {
-		msg, err := json.Marshal(s.state.Players)
+		data := make(map[string]any)
+		data["request_type"] = consts.UpdatePlayers
+		data["players"] = s.state.Players
+		msg, err := json.Marshal(data)
 		if err != nil {
 			log.Println("marshal error:", err)
 		}
@@ -186,6 +190,19 @@ func (s *Server) broadcastPlayers() {
 		if err != nil {
 			utils.DebugLog("write loop err:", err)
 		}
+	}
+}
+
+func (s *Server) broadcastDelete(username string) {
+	data := make(map[string]any)
+	data["request_type"] = consts.DeletePlayer
+	data["username"] = username
+	marshal, err := json.Marshal(data)
+	if err != nil {
+		log.Println("error marshaling json:", err)
+	}
+	if err := s.broadcastMsg(string(marshal)); err != nil {
+		utils.DebugLog("error broadcasting message:", err)
 	}
 }
 
@@ -200,7 +217,7 @@ func (s *Server) acceptLoop() {
 		}
 		s.mu.Lock()
 		s.conns[conn.RemoteAddr().String()] = NewConn(conn)
-		utils.DebugLog(
+		log.Println(
 			"new connection established:",
 			conn.RemoteAddr().String(),
 			"\ncurrent connections:",
