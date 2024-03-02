@@ -72,6 +72,28 @@ func (s *Server) Start() error {
 	return nil
 }
 
+func (s *Server) handleCoinUpdates() {
+	for {
+		s.state.GenerateCoin()
+		s.broadcastCoinUpdate()
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func (s *Server) broadcastCoinUpdate() {
+	data := make(map[string]any)
+	data["request_type"] = consts.CoinUpdate
+	data["coin_info"] = s.state.Coin
+	marshal, err := json.Marshal(data)
+	if err != nil {
+		utils.DebugLog("marshal error:", err)
+		return
+	}
+	if err := s.broadcastMsg(marshal); err != nil {
+		utils.DebugLog("coin broadcast err:", err)
+	}
+}
+
 func (s *Server) readLoop(conn net.Conn) {
 	defer func(conn net.Conn) {
 		err := conn.Close()
@@ -184,12 +206,11 @@ func (s *Server) broadcastPlayers() {
 		msg, err := json.Marshal(data)
 		if err != nil {
 			log.Println("marshal error:", err)
+			return
 		}
-		if err := s.broadcastMsg(string(msg) + "\n"); err != nil {
+		if err := s.broadcastMsg(msg); err != nil {
 			log.Println("broadcast error:", err)
-		}
-		if err != nil {
-			utils.DebugLog("write loop err:", err)
+			return
 		}
 	}
 }
@@ -201,8 +222,9 @@ func (s *Server) broadcastDelete(username string) {
 	marshal, err := json.Marshal(data)
 	if err != nil {
 		log.Println("error marshaling json:", err)
+		return
 	}
-	if err := s.broadcastMsg(string(marshal)); err != nil {
+	if err := s.broadcastMsg(marshal); err != nil {
 		utils.DebugLog("error broadcasting message:", err)
 	}
 }
@@ -229,7 +251,7 @@ func (s *Server) acceptLoop() {
 	}
 }
 
-func (s *Server) broadcastMsg(msg string) error {
+func (s *Server) broadcastMsg(msg []byte) error {
 	for addr := range s.conns {
 		s.mu.Lock()
 		if s.conns[addr] == nil {
@@ -257,12 +279,6 @@ func main() {
 				marshal, _ := json.Marshal(server.state.Players)
 				log.Println(string(marshal))
 			}
-		}
-	}()
-	go func() {
-		for {
-			server.state.GenerateCoin()
-			time.Sleep(5 * time.Second)
 		}
 	}()
 	err := server.Start()

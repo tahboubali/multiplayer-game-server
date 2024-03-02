@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	COIN_RADIUS = 10
-	WIDTH       = 750
-	HEIGHT      = 500
+	CoinRadius = 10
+	Width      = 750
+	Height     = 500
 )
 
 type State struct {
@@ -37,8 +37,8 @@ func NewGameState() State {
 }
 
 func (g *State) GenerateCoin() {
-	g.Coin.X = float64(rand.Intn(WIDTH - COIN_RADIUS + 1))
-	g.Coin.Y = float64(rand.Intn(HEIGHT - COIN_RADIUS + 1))
+	g.Coin.X = float64(rand.Intn(Width - CoinRadius + 1))
+	g.Coin.Y = float64(rand.Intn(Height - CoinRadius + 1))
 }
 
 func (g *State) handleProj(username string, data map[string]any) error {
