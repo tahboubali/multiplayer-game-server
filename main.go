@@ -153,12 +153,17 @@ func handleFraming(msg string) []string {
 			currMsg += string(msg[i])
 		}
 	}
-	return msgs
+	var final []string
+	for _, m := range msgs {
+		if m != "" {
+			final = append(final, m)
+		}
+	}
+	return final
 }
 
 // precondition: parameter m's payload must be in the correct JSON format.
 func (s *Server) handleMessage(m Message, addr string) error {
-	// todo: change return messages to json format.
 	payload := string(m.payload)
 	data := make(map[string]any)
 	err := json.Unmarshal([]byte(payload), &data)
