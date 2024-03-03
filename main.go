@@ -117,27 +117,43 @@ func (s *Server) readLoop(conn net.Conn) {
 			log.Println("read error:", err)
 			continue
 		}
-		msg := Message{
-			payload: buf[:n],
-			from:    conn.RemoteAddr(),
-		}
 
-		utils.DebugLog("new message received:", msg)
+		for _, payload := range handleFraming(string(buf[:n])) {
+			msg := Message{
+				payload: []byte(payload),
+				from:    conn.RemoteAddr(),
+			}
+			utils.DebugLog("new message received:", msg)
 
-		dst := &bytes.Buffer{}
-		if err := json.Compact(dst, msg.payload); err != nil {
-			utils.DebugLog("compact error", err)
-		}
-		msg.payload = dst.Bytes()
-		utils.DebugLog("compacted:", string(msg.payload))
-		err = s.handleMessage(msg, conn.RemoteAddr().String())
+			dst := &bytes.Buffer{}
+			if err := json.Compact(dst, msg.payload); err != nil {
+				utils.DebugLog("compact error", err)
+			}
+			msg.payload = dst.Bytes()
+			utils.DebugLog("compacted:", string(msg.payload))
+			err = s.handleMessage(msg, conn.RemoteAddr().String())
 
-		if err != nil {
-			write := fmt.Sprintln("error handling message:", err)
-			fmt.Print(write)
-			_, _ = conn.Write([]byte(write))
+			if err != nil {
+				write := fmt.Sprintln("error handling message:", err)
+				fmt.Print(write)
+				_, _ = conn.Write([]byte(write))
+			}
 		}
 	}
+}
+
+func handleFraming(msg string) []string {
+	var msgs []string
+	currMsg := ""
+	for i := 0; i < len(msg); i++ {
+		if msg[i] == '%' {
+			msgs = append(msgs, currMsg)
+			currMsg = ""
+		} else {
+			currMsg += string(msg[i])
+		}
+	}
+	return msgs
 }
 
 // precondition: parameter m's payload must be in the correct JSON format.
