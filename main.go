@@ -12,6 +12,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -71,6 +72,28 @@ func (s *Server) Start() error {
 	return nil
 }
 
+func (s *Server) handleCoinUpdates() {
+	for {
+		s.state.GenerateCoin()
+		s.broadcastCoinUpdate()
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func (s *Server) broadcastCoinUpdate() {
+	data := make(map[string]any)
+	data["request_type"] = consts.CoinUpdate
+	data["coin_info"] = s.state.Coin
+	marshal, err := json.Marshal(data)
+	if err != nil {
+		utils.DebugLog("marshal error:", err)
+		return
+	}
+	if err := s.broadcastMsg(marshal); err != nil {
+		utils.DebugLog("coin broadcast err:", err)
+	}
+}
+
 func (s *Server) readLoop(conn net.Conn) {
 	defer func(conn net.Conn) {
 		err := conn.Close()
@@ -94,32 +117,53 @@ func (s *Server) readLoop(conn net.Conn) {
 			log.Println("read error:", err)
 			continue
 		}
-		msg := Message{
-			payload: buf[:n],
-			from:    conn.RemoteAddr(),
-		}
 
-		utils.DebugLog("new message received:", msg)
+		for _, payload := range handleFraming(string(buf[:n])) {
+			msg := Message{
+				payload: []byte(payload),
+				from:    conn.RemoteAddr(),
+			}
+			utils.DebugLog("new message received:", msg)
 
-		dst := &bytes.Buffer{}
-		if err := json.Compact(dst, msg.payload); err != nil {
-			utils.DebugLog("compact error", err)
-		}
-		msg.payload = dst.Bytes()
-		utils.DebugLog("compacted:", string(msg.payload))
-		err = s.handleMessage(msg, conn.RemoteAddr().String())
+			dst := &bytes.Buffer{}
+			if err := json.Compact(dst, msg.payload); err != nil {
+				utils.DebugLog("compact error", err)
+			}
+			msg.payload = dst.Bytes()
+			utils.DebugLog("compacted:", string(msg.payload))
+			err = s.handleMessage(msg, conn.RemoteAddr().String())
 
-		if err != nil {
-			write := fmt.Sprintln("error handling message:", err)
-			fmt.Print(write)
-			_, _ = conn.Write([]byte(write))
+			if err != nil {
+				write := fmt.Sprintln("error handling message:", err)
+				fmt.Print(write)
+				_, _ = conn.Write([]byte(write))
+			}
 		}
 	}
 }
 
+func handleFraming(msg string) []string {
+	var msgs []string
+	currMsg := ""
+	for i := 0; i < len(msg); i++ {
+		if msg[i] == '%' {
+			msgs = append(msgs, currMsg)
+			currMsg = ""
+		} else {
+			currMsg += string(msg[i])
+		}
+	}
+	var final []string
+	for _, m := range msgs {
+		if m != "" {
+			final = append(final, m)
+		}
+	}
+	return final
+}
+
 // precondition: parameter m's payload must be in the correct JSON format.
 func (s *Server) handleMessage(m Message, addr string) error {
-	// todo: change return messages to json format.
 	payload := string(m.payload)
 	data := make(map[string]any)
 	err := json.Unmarshal([]byte(payload), &data)
@@ -183,12 +227,11 @@ func (s *Server) broadcastPlayers() {
 		msg, err := json.Marshal(data)
 		if err != nil {
 			log.Println("marshal error:", err)
+			return
 		}
-		if err := s.broadcastMsg(string(msg) + "\n"); err != nil {
+		if err := s.broadcastMsg(msg); err != nil {
 			log.Println("broadcast error:", err)
-		}
-		if err != nil {
-			utils.DebugLog("write loop err:", err)
+			return
 		}
 	}
 }
@@ -200,8 +243,9 @@ func (s *Server) broadcastDelete(username string) {
 	marshal, err := json.Marshal(data)
 	if err != nil {
 		log.Println("error marshaling json:", err)
+		return
 	}
-	if err := s.broadcastMsg(string(marshal)); err != nil {
+	if err := s.broadcastMsg(marshal); err != nil {
 		utils.DebugLog("error broadcasting message:", err)
 	}
 }
@@ -228,7 +272,7 @@ func (s *Server) acceptLoop() {
 	}
 }
 
-func (s *Server) broadcastMsg(msg string) error {
+func (s *Server) broadcastMsg(msg []byte) error {
 	for addr := range s.conns {
 		s.mu.Lock()
 		if s.conns[addr] == nil {

@@ -3,18 +3,42 @@ package game
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"sync"
+)
+
+const (
+	CoinRadius = 10
+	Width      = 750
+	Height     = 500
 )
 
 type State struct {
 	playersLock sync.Mutex
 	Players     map[string]*Player
+	Coin        Coin
+}
+
+type gameObj struct {
+	X  float64 `json:"x"`
+	Y  float64 `json:"y"`
+	VX float64 `json:"velocity_x"`
+	VY float64 `json:"velocity_y"`
+}
+
+type Coin struct {
+	gameObj
 }
 
 func NewGameState() State {
 	return State{
 		Players: make(map[string]*Player),
 	}
+}
+
+func (g *State) GenerateCoin() {
+	g.Coin.X = float64(rand.Intn(Width - CoinRadius + 1))
+	g.Coin.Y = float64(rand.Intn(Height - CoinRadius + 1))
 }
 
 func (g *State) handleProj(username string, data map[string]any) error {
