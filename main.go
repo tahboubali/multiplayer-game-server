@@ -68,6 +68,7 @@ func (s *Server) Start() error {
 	s.ln = ln
 	s.wg.Add(1)
 	go s.acceptLoop()
+	go s.handleCoinUpdates()
 	s.wg.Wait()
 	return nil
 }
@@ -118,48 +119,26 @@ func (s *Server) readLoop(conn net.Conn) {
 			continue
 		}
 
-		for _, payload := range handleFraming(string(buf[:n])) {
-			msg := Message{
-				payload: []byte(payload),
-				from:    conn.RemoteAddr(),
-			}
-			utils.DebugLog("new message received:", msg)
+		msg := Message{
+			payload: buf[:n],
+			from:    conn.RemoteAddr(),
+		}
+		utils.DebugLog("new message received:", msg)
 
-			dst := &bytes.Buffer{}
-			if err := json.Compact(dst, msg.payload); err != nil {
-				utils.DebugLog("compact error", err)
-			}
-			msg.payload = dst.Bytes()
-			utils.DebugLog("compacted:", string(msg.payload))
-			err = s.handleMessage(msg, conn.RemoteAddr().String())
+		dst := &bytes.Buffer{}
+		if err := json.Compact(dst, msg.payload); err != nil {
+			utils.DebugLog("compact error", err)
+		}
+		msg.payload = dst.Bytes()
+		utils.DebugLog("compacted:", string(msg.payload))
+		err = s.handleMessage(msg, conn.RemoteAddr().String())
 
-			if err != nil {
-				write := fmt.Sprintln("error handling message:", err)
-				fmt.Print(write)
-				_, _ = conn.Write([]byte(write))
-			}
+		if err != nil {
+			write := fmt.Sprintln("error handling message:", err)
+			fmt.Print(write)
+			_, _ = conn.Write([]byte(write))
 		}
 	}
-}
-
-func handleFraming(msg string) []string {
-	var msgs []string
-	currMsg := ""
-	for i := 0; i < len(msg); i++ {
-		if msg[i] == '%' {
-			msgs = append(msgs, currMsg)
-			currMsg = ""
-		} else {
-			currMsg += string(msg[i])
-		}
-	}
-	var final []string
-	for _, m := range msgs {
-		if m != "" {
-			final = append(final, m)
-		}
-	}
-	return final
 }
 
 // precondition: parameter m's payload must be in the correct JSON format.

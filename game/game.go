@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	CoinRadius = 10
+	CoinRadius = 30
 	Width      = 750
 	Height     = 500
 )
@@ -27,7 +27,8 @@ type gameObj struct {
 }
 
 type Coin struct {
-	gameObj
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 func NewGameState() State {
@@ -39,64 +40,6 @@ func NewGameState() State {
 func (g *State) GenerateCoin() {
 	g.Coin.X = float64(rand.Intn(Width - CoinRadius + 1))
 	g.Coin.Y = float64(rand.Intn(Height - CoinRadius + 1))
-}
-
-func (g *State) handleProj(username string, data map[string]any) error {
-	if _, exists := data["projectiles"]; !exists {
-		return fmt.Errorf("`projectiles` attribute not found")
-	}
-	projs, ok := data["projectiles"].(map[int64]any)
-	if !ok {
-		return fmt.Errorf("invalid type for attribute `projectiles`")
-	}
-	g.playersLock.Lock()
-	player := g.Players[username]
-	g.playersLock.Unlock()
-	projectiles := player.Projectiles
-	err := validateProjectiles(projs)
-	if err != nil {
-		return err
-	}
-	for id, tmp := range projs {
-		projData := tmp.(map[string]float64)
-		x := projData["x"]
-		y := projData["y"]
-		vX := projData["velocity_x"]
-		vY := projData["velocity_y"]
-		if projectiles[id] != (Projectile{}) {
-			player.ShootProj(x, y, vX, vY)
-		} else {
-			proj := NewProjectile(username, x, y, vX, vY)
-			projectiles[id] = proj
-			proj.Id = id
-			// FIXME might not work.
-		}
-	}
-	return nil
-}
-
-func validateProjectiles(data map[int64]any) error {
-	for id, proj := range data {
-		err := validateData(id, proj, []string{"x", "y", "velocity_x", "velocity_y"})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateData(id int64, data any, attributes []string) error {
-	valid, ok := data.(map[string]any)
-	if !ok {
-		return fmt.Errorf("invalid type for projectile id %d", id)
-	}
-
-	for _, attr := range attributes {
-		if _, exists := valid[attr]; exists {
-			return fmt.Errorf("`%s` attribute not found in projectile for id %d", attr, id)
-		}
-	}
-	return nil
 }
 
 // HandleUpdatePlayer updateType refers to what aspect should be updated. for now, the two update types are movement and projectiles
@@ -115,13 +58,7 @@ func (g *State) HandleUpdatePlayer(data map[string]any, updateType string) ([]by
 	if err != nil {
 		return []byte(fmt.Sprintf("failed to update player projectiles: %s\n", err.Error())), err
 	}
-	if updateType == "projectile" {
-		err := g.handleProj(username, data)
-		if err != nil {
-			return []byte(fmt.Sprintf("failed to update player: %s\n", err.Error())), err
-		}
-		*(g.Players[username]) = *player
-	} else if updateType == "movement" {
+	if updateType == "movement" {
 		*(g.Players[username]) = *player
 	}
 	marshal, _ := json.Marshal(*player)
@@ -154,8 +91,9 @@ func (g *State) HandleNewPlayer(data map[string]any) (*Player, bool, []byte, err
 		return g.Players[player.Username], true, []byte(fmt.Sprintf("player with username `%s` exists", player.Username)), nil
 	}
 	g.Players[player.Username] = player
-	marshal, _ := json.Marshal(*player)
-	return player, false, []byte(fmt.Sprintf("{\"message\": \"new_player\", \"player\":%v}\n", string(marshal))), nil
+	players, _ := json.Marshal(*player)
+	coinInfo, _ := json.Marshal(g.Coin)
+	return player, false, []byte(fmt.Sprintf("{\"message\": \"new_player\", \"player\":%s, \"coin_info\":%s}\n", string(players), string(coinInfo))), nil
 }
 
 func extractPlayerInfo(data map[string]any) (*Player, error) {
