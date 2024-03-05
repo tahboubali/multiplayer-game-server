@@ -184,12 +184,6 @@ func (s *Server) handleMessage(m Message, addr string) error {
 		} else {
 			s.broadcastDelete(deleted)
 		}
-	} else if requestType == consts.UpdatePlayerProjectiles {
-		_, err := s.state.HandleUpdatePlayer(data, "projectiles")
-		if err != nil {
-			utils.DebugLog("error updating player:", err)
-		}
-		s.broadcastPlayers()
 	} else {
 		msg := fmt.Sprintf("did not recieve valid `request_type` for json: %s", payload)
 		_, _ = conn.Write([]byte(msg))
