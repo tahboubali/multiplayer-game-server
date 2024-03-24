@@ -141,6 +141,28 @@ func (s *Server) readLoop(conn net.Conn) {
 	}
 }
 
+func (s *Server) handleCoinUpdates() {
+	for {
+		s.state.GenerateCoin()
+		s.broadcastCoinUpdate()
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func (s *Server) broadcastCoinUpdate() {
+	data := make(map[string]any)
+	data["request_type"] = consts.CoinUpdate
+	data["coin_info"] = s.state.Coin
+	marshal, err := json.Marshal(data)
+	if err != nil {
+		utils.DebugLog("marshal error:", err)
+		return
+	}
+	if err := s.broadcastMsg(string(marshal)); err != nil {
+		utils.DebugLog("coin broadcast err:", err)
+	}
+}
+
 // precondition: parameter m's payload must be in the correct JSON format.
 func (s *Server) handleMessage(m Message, addr string) error {
 	payload := string(m.payload)
@@ -242,6 +264,7 @@ func (s *Server) acceptLoop() {
 		)
 		s.mu.Unlock()
 		go s.readLoop(conn)
+		go s.handleCoinUpdates()
 	}
 }
 
@@ -273,12 +296,6 @@ func main() {
 				marshal, _ := json.Marshal(server.state.Players)
 				log.Println(string(marshal))
 			}
-		}
-	}()
-	go func() {
-		for {
-			server.state.GenerateCoin()
-			time.Sleep(5 * time.Second)
 		}
 	}()
 	err := server.Start()
