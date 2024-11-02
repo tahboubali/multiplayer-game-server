@@ -1,3 +1,3 @@
-module multi-player-game
+module multiplayer-game-server
 
 go 1.21
